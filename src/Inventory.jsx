@@ -174,6 +174,21 @@ export default function Inventory() {
         return new Date(timestamp).toLocaleString();
     };
 
+    const getStatusColor = (status) => {
+        switch (status) {
+            case 'Pending':
+                return { bg: '#fff3cd', color: '#856404' };
+            case 'Processing':
+                return { bg: '#cfe2ff', color: '#084298' };
+            case 'Processed':
+                return { bg: '#d1e7dd', color: '#0f5132' };
+            case 'Cancelled':
+                return { bg: '#f8d7da', color: '#842029' };
+            default:
+                return { bg: '#e2e3e5', color: '#41464b' };
+        }
+    };
+
     return (
         <div className="App">
             <div className="app-title">
@@ -277,26 +292,28 @@ export default function Inventory() {
                               </tr>
                           </thead>
                           <tbody>
-                              {orderHistory.map((order) => (
-                                  <tr key={order.id}>
-                                      <td>{order.id}</td>
-                                      <td>{order.item_name}</td>
-                                      <td>{order.item_quantity}</td>
-                                      <td>
-                                          <span style={{
-                                              padding: '4px 8px',
-                                              borderRadius: '4px',
-                                              backgroundColor: order.status === 'Processed' ? '#d4edda' : 
-                                                            order.status === 'Processing' ? '#fff3cd' : '#f8d7da',
-                                              color: order.status === 'Processed' ? '#155724' : 
-                                                    order.status === 'Processing' ? '#856404' : '#721c24'
-                                          }}>
-                                              {order.status || 'Pending'}
-                                          </span>
-                                      </td>
-                                      <td>{formatDate(order.created_on)}</td>
-                                  </tr>
-                              ))}
+                              {orderHistory.map((order) => {
+                                  const statusColors = getStatusColor(order.status);
+                                  return (
+                                      <tr key={order.id}>
+                                          <td>{order.id}</td>
+                                          <td>{order.item_name}</td>
+                                          <td>{order.item_quantity}</td>
+                                          <td>
+                                              <span style={{
+                                                  padding: '4px 8px',
+                                                  borderRadius: '4px',
+                                                  backgroundColor: statusColors.bg,
+                                                  color: statusColors.color,
+                                                  fontWeight: '600'
+                                              }}>
+                                                  {order.status || 'Pending'}
+                                              </span>
+                                          </td>
+                                          <td>{formatDate(order.created_on)}</td>
+                                      </tr>
+                                  );
+                              })}
                           </tbody>
                       </table>
                     </div>
