@@ -19,6 +19,7 @@ export default function Inventory() {
     const [submit, setSubmit] = useState(false);
     const [orderHistory, setOrderHistory] = useState([]);
     const [error, setError] = useState('');
+    const [success, setSuccess] = useState('');
     const [ws, setWs] = useState(null);
 
     useEffect(() => {
@@ -43,6 +44,10 @@ export default function Inventory() {
                             : order
                     )
                 );
+
+                // Show success message for status updates
+                setSuccess(`Order #${data.data.order_id} status updated to: ${data.data.status}`);
+                setTimeout(() => setSuccess(''), 5000);
             }
         };
 
@@ -89,7 +94,8 @@ export default function Inventory() {
     const addRow = () => {
         // Only add a new row if all existing rows have items selected
         if (!areAllRowsValid()) {
-            alert('Please select an item for all rows before adding a new one');
+            setError('Please select an item for all rows before adding a new one');
+            setTimeout(() => setError(''), 3000);
             return;
         }
 
@@ -136,12 +142,14 @@ export default function Inventory() {
     const submitOrder = async () => {
         // Clear any previous errors
         setError('');
+        setSuccess('');
 
         // Filter out rows that don't have an item selected
         const validRows = rows.filter(row => row.item_name !== '');
 
         if (validRows.length === 0) {
-            alert('Please select at least one item before submitting');
+            setError('Please select at least one item before submitting');
+            setTimeout(() => setError(''), 3000);
             return;
         }
 
@@ -154,6 +162,8 @@ export default function Inventory() {
 
             if(result){
                 setSubmit(true);
+                setSuccess('Order submitted successfully!');
+                setTimeout(() => setSuccess(''), 5000);
                 
                 // Fetch updated order history from database
                 await fetchOrderHistory();
@@ -163,11 +173,27 @@ export default function Inventory() {
                 ]);
             } else {
                 setError('Failed to create order. Please try again.');
+                setTimeout(() => setError(''), 5000);
             }
         } catch (err) {
             setError('An error occurred while submitting the order. Please try again.');
+            setTimeout(() => setError(''), 5000);
             console.error('Order submission error:', err);
         }
+    };
+
+    const handleLogout = () => {
+        // Close WebSocket connection
+        if (ws) {
+            ws.close();
+        }
+        
+        // Clear session storage
+        sessionStorage.removeItem('user');
+        sessionStorage.removeItem('isAuthenticated');
+        
+        // Redirect to login page or home
+        window.location.href = '/login'; // Adjust this to your login route
     };
 
     const formatDate = (timestamp) => {
@@ -177,43 +203,56 @@ export default function Inventory() {
     const getStatusColor = (status) => {
         switch (status) {
             case 'Pending':
-                return { bg: '#fff3cd', color: '#856404' };
+                return 'status-pending';
             case 'Processing':
-                return { bg: '#cfe2ff', color: '#084298' };
+                return 'status-processing';
             case 'Processed':
-                return { bg: '#d1e7dd', color: '#0f5132' };
+                return 'status-completed';
             case 'Cancelled':
-                return { bg: '#f8d7da', color: '#842029' };
+                return 'status-cancelled';
             default:
-                return { bg: '#e2e3e5', color: '#41464b' };
+                return 'status-default';
         }
     };
 
     return (
-        <div className="App">
-            <div className="app-title">
-                Event Driven Architecture
+        <div className="inventory-portal">
+            <div className="inventory-header">
+                <div className="inventory-header-top">
+                    <div>
+                        <h1 className="inventory-title">Inventory Management</h1>
+                        <p className="inventory-subtitle">Welcome, {sessionStorage.getItem("user") || 'User'}</p>
+                    </div>
+                    <button className="logout-btn" onClick={handleLogout}>
+                        🚪 Logout
+                    </button>
+                </div>
             </div>
 
-            <div className="inventory-dropdown-wrapper">
-                <div className="inventory-label">Select Inventory Items</div>
-
+            <div className="inventory-content">
+                {/* Alert Messages */}
                 {error && (
-                    <div className="error-message" style={{
-                        backgroundColor: '#fee',
-                        border: '1px solid #fcc',
-                        color: '#c33',
-                        padding: '10px',
-                        borderRadius: '4px',
-                        marginBottom: '10px'
-                    }}>
-                        {error}
+                    <div className="alert alert-error">
+                        <span className="alert-icon">⚠️</span>
+                        <span>{error}</span>
+                        <button className="alert-close" onClick={() => setError('')}>×</button>
                     </div>
                 )}
 
-                <div className="inventory-order-card">
-                    <div className="inventory-order">
-                        <table>
+                {success && (
+                    <div className="alert alert-success">
+                        <span className="alert-icon">✓</span>
+                        <span>{success}</span>
+                        <button className="alert-close" onClick={() => setSuccess('')}>×</button>
+                    </div>
+                )}
+
+                {/* Order Form Card */}
+                <div className="order-form-card">
+                    <h2 className="card-title">Create New Order</h2>
+                    
+                    <div className="order-table-container">
+                        <table className="order-table">
                             <thead>
                                 <tr>
                                     <th>Item</th>
@@ -232,7 +271,7 @@ export default function Inventory() {
                                                     updateRow(row.item_id, 'item_name', e.target.value)
                                                 }
                                             >
-                                                <option value="">-- Select --</option>
+                                                <option value="">-- Select Item --</option>
                                                 {inventory.map((i) => (
                                                     <option key={i.label} value={i.label}>
                                                         {i.value}
@@ -255,8 +294,9 @@ export default function Inventory() {
                                             <button
                                                 className="remove-button"
                                                 onClick={() => removeRow(row.item_id)}
+                                                disabled={rows.length === 1}
                                             >
-                                                Remove
+                                                🗑️ Remove
                                             </button>
                                         </td>
                                     </tr>
@@ -264,61 +304,61 @@ export default function Inventory() {
                             </tbody>
                         </table>
                     </div>
-                </div>
 
-                <div className="add-row-container">
-                    <button className="button-add-item" onClick={addRow}>
-                        ADD ITEM
-                    </button>
-                </div>
-
-                <div className="submit-order">
-                    <button className="button-submit-order" onClick={submitOrder}>SUBMIT</button>
-                </div>
-            </div>
-
-            {submit && orderHistory.length > 0 && (
-                <div className="order-history">
-                    <h3>Order History</h3>
-                    <div className="order-history-table">
-                        <table>
-                          <thead>
-                              <tr>
-                                  <th>Order ID</th>
-                                  <th>Item</th>
-                                  <th>Quantity</th>
-                                  <th>Status</th>
-                                  <th>Order Date</th>
-                              </tr>
-                          </thead>
-                          <tbody>
-                              {orderHistory.map((order) => {
-                                  const statusColors = getStatusColor(order.status);
-                                  return (
-                                      <tr key={order.id}>
-                                          <td>{order.id}</td>
-                                          <td>{order.item_name}</td>
-                                          <td>{order.item_quantity}</td>
-                                          <td>
-                                              <span style={{
-                                                  padding: '4px 8px',
-                                                  borderRadius: '4px',
-                                                  backgroundColor: statusColors.bg,
-                                                  color: statusColors.color,
-                                                  fontWeight: '600'
-                                              }}>
-                                                  {order.status || 'Pending'}
-                                              </span>
-                                          </td>
-                                          <td>{formatDate(order.created_on)}</td>
-                                      </tr>
-                                  );
-                              })}
-                          </tbody>
-                      </table>
+                    <div className="order-actions">
+                        <button className="button-add-item" onClick={addRow}>
+                            ➕ Add Item
+                        </button>
+                        <button className="button-submit-order" onClick={submitOrder}>
+                            📦 Submit Order
+                        </button>
                     </div>
                 </div>
-            )}
+
+                {/* Order History */}
+                {submit && orderHistory.length > 0 && (
+                    <div className="order-history-card">
+                        <h2 className="card-title">Order History</h2>
+                        
+                        <div className="history-table-container">
+                            <table className="history-table">
+                                <thead>
+                                    <tr>
+                                        <th>Order ID</th>
+                                        <th>Item</th>
+                                        <th>Quantity</th>
+                                        <th>Status</th>
+                                        <th>Order Date</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {orderHistory.map((order) => (
+                                        <tr key={order.id}>
+                                            <td className="order-id">#{order.id}</td>
+                                            <td className="item-name">{order.item_name}</td>
+                                            <td className="quantity">{order.item_quantity}</td>
+                                            <td>
+                                                <span className={`status-badge ${getStatusColor(order.status)}`}>
+                                                    {order.status || 'Pending'}
+                                                </span>
+                                            </td>
+                                            <td className="date">{formatDate(order.created_on)}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                )}
+
+                {/* Empty State */}
+                {!submit || orderHistory.length === 0 ? (
+                    <div className="empty-state">
+                        <div className="empty-icon">📋</div>
+                        <p>No orders yet. Create your first order above!</p>
+                    </div>
+                ) : null}
+            </div>
         </div>
     );
 }
