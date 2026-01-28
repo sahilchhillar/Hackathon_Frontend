@@ -120,4 +120,26 @@ export default class InventoryApi {
             return false;
         }
     }
+    async searchItems(searchQuery) {
+        try {
+            const response = await axios.get(
+                this.BASE + "products/search/", {
+                    headers: {
+                        'Authorization': `Bearer ${this.accessToken}`,
+                        "data-request": searchQuery  // Search query in header
+                    }
+                }
+            );
+
+            if(response.status === 200){
+                console.log(response.data.message);
+                return response.data.message;  // Returns array of products
+            }
+            return [];
+        } catch (error) {
+            console.error("Error searching products:", error.response?.data || error.message);
+            return [];
+        }
+    }
 }
+

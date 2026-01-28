@@ -1,19 +1,13 @@
 import React from 'react'
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import InventoryApi from  './api';
 import './Inventory.css';
 
 export default function Inventory() {
-    const inventory = [
-        { label: 'apple', value: 'Apple' },
-        { label: 'banana', value: 'Banana' },
-        { label: 'cherry', value: 'Cherry' }
-    ];
-
     const inventoryClass = new InventoryApi();
 
     const [rows, setRows] = useState([
-        { item_id: Math.floor(Math.random() * 100), item_name: '', item_quantity: 1}
+        { item_id: Math.floor(Math.random() * 100), item_name: '', item_quantity: 1, product_id: null}
     ]);
 
     const [submit, setSubmit] = useState(false);
@@ -101,7 +95,7 @@ export default function Inventory() {
 
         setRows(prev => [
             ...prev,
-            { item_id: Math.floor(Math.random() * 100), item_name: '', item_quantity: 1}
+            { item_id: Math.floor(Math.random() * 100), item_name: '', item_quantity: 1, product_id: null}
         ]);
     };
 
@@ -122,15 +116,17 @@ export default function Inventory() {
 
         rowsToMerge.forEach(row => {
             if (row.item_name !== '') {
-                if (mergedItems[row.item_name]) {
+                const key = row.product_id || row.item_name;
+                if (mergedItems[key]) {
                     // Item already exists, add quantities
-                    mergedItems[row.item_name].item_quantity += row.item_quantity;
+                    mergedItems[key].item_quantity += row.item_quantity;
                 } else {
                     // New item, create entry
-                    mergedItems[row.item_name] = {
+                    mergedItems[key] = {
                         item_id: row.item_id,
                         item_name: row.item_name,
                         item_quantity: row.item_quantity,
+                        product_id: row.product_id
                     };
                 }
             }
@@ -169,7 +165,7 @@ export default function Inventory() {
                 await fetchOrderHistory();
                 
                 setRows([
-                    { item_id: Math.floor(Math.random() * 100), item_name: '', item_quantity: 1, user: sessionStorage.getItem("user")}
+                    { item_id: Math.floor(Math.random() * 100), item_name: '', item_quantity: 1, product_id: null, user: sessionStorage.getItem("user")}
                 ]);
             } else {
                 setError('Failed to create order. Please try again.');
@@ -255,7 +251,7 @@ export default function Inventory() {
                         <table className="order-table">
                             <thead>
                                 <tr>
-                                    <th>Item</th>
+                                    <th>Product</th>
                                     <th>Quantity</th>
                                     <th>Action</th>
                                 </tr>
@@ -264,20 +260,14 @@ export default function Inventory() {
                                 {rows.map((row) => (
                                     <tr key={row.item_id}>
                                         <td>
-                                            <select
-                                                className="select-item"
+                                            <InlineProductSearch
+                                                rowId={row.item_id}
                                                 value={row.item_name}
-                                                onChange={(e) =>
-                                                    updateRow(row.item_id, 'item_name', e.target.value)
-                                                }
-                                            >
-                                                <option value="">-- Select Item --</option>
-                                                {inventory.map((i) => (
-                                                    <option key={i.label} value={i.label}>
-                                                        {i.value}
-                                                    </option>
-                                                ))}
-                                            </select>
+                                                onProductSelect={(product) => {
+                                                    updateRow(row.item_id, 'item_name', product.name);
+                                                    updateRow(row.item_id, 'product_id', product.id);
+                                                }}
+                                            />
                                         </td>
                                         <td>
                                             <input
@@ -359,6 +349,204 @@ export default function Inventory() {
                     </div>
                 ) : null}
             </div>
+        </div>
+    );
+}
+
+// Inline Product Search Component (embedded in the same file)
+function InlineProductSearch({ rowId, value, onProductSelect }) {
+    const [searchTerm, setSearchTerm] = useState(value || '');
+    const [searchResults, setSearchResults] = useState([]);
+    const [isSearching, setIsSearching] = useState(false);
+    const [showDropdown, setShowDropdown] = useState(false);
+    const [selectedIndex, setSelectedIndex] = useState(-1);
+    const dropdownRef = useRef(null);
+    const inputRef = useRef(null);
+    const inventoryClass = new InventoryApi();
+
+    // Update searchTerm when value prop changes
+    useEffect(() => {
+        setSearchTerm(value || '');
+    }, [value]);
+
+    // Close dropdown when clicking outside
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+                setShowDropdown(false);
+            }
+        };
+
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
+    // Debounced search
+    useEffect(() => {
+        const delayDebounce = setTimeout(() => {
+            if (searchTerm && searchTerm.length >= 2) {
+                searchProducts(searchTerm);
+            } else {
+                setSearchResults([]);
+                setShowDropdown(false);
+            }
+        }, 300); // 300ms delay
+
+        return () => clearTimeout(delayDebounce);
+    }, [searchTerm]);
+
+    const searchProducts = async (query) => {
+        setIsSearching(true);
+        try {
+            const results = await inventoryClass.searchProducts(query);
+            setSearchResults(results || []);
+            setShowDropdown(true);
+            setSelectedIndex(-1);
+        } catch (error) {
+            console.error('Error searching products:', error);
+            setSearchResults([]);
+        } finally {
+            setIsSearching(false);
+        }
+    };
+
+    const handleInputChange = (e) => {
+        const value = e.target.value;
+        setSearchTerm(value);
+    };
+
+    const handleProductClick = (product) => {
+        setSearchTerm(product.name);
+        setShowDropdown(false);
+        onProductSelect(product);
+    };
+
+    const handleKeyDown = (e) => {
+        if (!showDropdown || searchResults.length === 0) return;
+
+        switch (e.key) {
+            case 'ArrowDown':
+                e.preventDefault();
+                setSelectedIndex(prev => 
+                    prev < searchResults.length - 1 ? prev + 1 : prev
+                );
+                break;
+            case 'ArrowUp':
+                e.preventDefault();
+                setSelectedIndex(prev => prev > 0 ? prev - 1 : -1);
+                break;
+            case 'Enter':
+                e.preventDefault();
+                if (selectedIndex >= 0 && searchResults[selectedIndex]) {
+                    handleProductClick(searchResults[selectedIndex]);
+                }
+                break;
+            case 'Escape':
+                setShowDropdown(false);
+                setSelectedIndex(-1);
+                break;
+            default:
+                break;
+        }
+    };
+
+    const highlightMatch = (text, query) => {
+        if (!query) return text;
+        
+        const parts = text.split(new RegExp(`(${query})`, 'gi'));
+        return parts.map((part, index) => 
+            part.toLowerCase() === query.toLowerCase() 
+                ? <span key={index} className="search-highlight">{part}</span>
+                : part
+        );
+    };
+
+    return (
+        <div className="inline-product-search" ref={dropdownRef}>
+            <div className="search-input-wrapper">
+                <input
+                    ref={inputRef}
+                    type="text"
+                    className="search-input"
+                    value={searchTerm}
+                    onChange={handleInputChange}
+                    onKeyDown={handleKeyDown}
+                    placeholder="Search for a product..."
+                    autoComplete="off"
+                />
+                {isSearching && (
+                    <div className="search-spinner">
+                        <div className="spinner"></div>
+                    </div>
+                )}
+                {searchTerm && !isSearching && (
+                    <button
+                        className="search-clear"
+                        onClick={() => {
+                            setSearchTerm('');
+                            setSearchResults([]);
+                            setShowDropdown(false);
+                            onProductSelect({ id: null, name: '' });
+                        }}
+                    >
+                        ×
+                    </button>
+                )}
+            </div>
+
+            {showDropdown && searchResults.length > 0 && (
+                <div className="search-dropdown">
+                    <div className="search-results-header">
+                        {searchResults.length} {searchResults.length === 1 ? 'result' : 'results'} found
+                    </div>
+                    <ul className="search-results">
+                        {searchResults.map((product, index) => (
+                            <li
+                                key={product.id}
+                                className={`search-result-item ${index === selectedIndex ? 'selected' : ''}`}
+                                onClick={() => handleProductClick(product)}
+                                onMouseEnter={() => setSelectedIndex(index)}
+                            >
+                                <div className="product-info">
+                                    <div className="product-name">
+                                        {highlightMatch(product.name, searchTerm)}
+                                    </div>
+                                    {product.description && (
+                                        <div className="product-description">
+                                            {product.description}
+                                        </div>
+                                    )}
+                                    {product.category && (
+                                        <div className="product-meta">
+                                            <span className="product-category">{product.category}</span>
+                                            {product.stock !== undefined && (
+                                                <span className={`product-stock ${product.stock > 0 ? 'in-stock' : 'out-of-stock'}`}>
+                                                    {product.stock > 0 ? `${product.stock} in stock` : 'Out of stock'}
+                                                </span>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                                {product.price && (
+                                    <div className="product-price">
+                                        ${product.price}
+                                    </div>
+                                )}
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            )}
+
+            {showDropdown && !isSearching && searchTerm.length >= 2 && searchResults.length === 0 && (
+                <div className="search-dropdown">
+                    <div className="search-no-results">
+                        <div className="no-results-icon">🔍</div>
+                        <div className="no-results-text">No products found</div>
+                        <div className="no-results-hint">Try a different search term</div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
